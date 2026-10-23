@@ -30,11 +30,20 @@ def pedir_precio(etiqueta="Precio: "):
     while True:
         try:
             valor = Decimal(input(etiqueta).replace(",", "."))
-            if valor.is_finite() and valor >= 0:
-                return valor
-            print("El precio debe ser un número no negativo.")
+            if valor.is_finite() and valor >= 0 and valor == valor.to_integral_value():
+                return int(valor)
+            print("El precio debe ser un entero no negativo (así está definido en MySQL).")
         except (InvalidOperation, ValueError):
             print("Ingresá un precio válido.")
+
+
+def pedir_telefono(etiqueta):
+    while True:
+        valor = input(etiqueta).strip()
+        if valor.isdigit():
+            print("Aviso: MySQL guarda el teléfono como número; no conserva ceros iniciales ni el signo +.")
+            return int(valor)
+        print("Ingresá solo dígitos, según el tipo entero de la columna cel.")
 
 
 def mostrar_producto(producto):
@@ -108,7 +117,7 @@ def menu_proveedores():
         opcion = input("> ").strip()
         try:
             if opcion == "1":
-                p = conexion.crear_proveedor(pedir_texto("Empresa: "), pedir_texto("Celular/teléfono: "), pedir_texto("Ubicación: "))
+                p = conexion.crear_proveedor(pedir_texto("Empresa: "), pedir_telefono("Celular/teléfono: "), pedir_texto("Ubicación: "))
                 print("Proveedor registrado:")
                 mostrar_proveedor(p)
             elif opcion == "2":
@@ -136,7 +145,7 @@ def menu_proveedores():
                 if conexion.buscar_proveedor(id_p) is None:
                     print("No se encontró el proveedor.")
                     continue
-                p = conexion.actualizar_proveedor(id_p, pedir_texto("Empresa nueva: "), pedir_texto("Teléfono nuevo: "), pedir_texto("Ubicación nueva: "))
+                p = conexion.actualizar_proveedor(id_p, pedir_texto("Empresa nueva: "), pedir_telefono("Teléfono nuevo: "), pedir_texto("Ubicación nueva: "))
                 print("Proveedor actualizado.")
                 mostrar_proveedor(p)
             elif opcion == "5":
