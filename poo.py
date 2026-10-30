@@ -8,6 +8,12 @@ from datetime import datetime
 # ===== FIN CORRECCIÓN DE CODEX =====
 
 
+# ===== CÓDIGO AGREGADO POR CODEX =====
+# Lista sencilla para detectar c?digos repetidos entre proveedores.
+PRODUCTOS_REGISTRADOS = []
+# ===== FIN CÓDIGO AGREGADO POR CODEX =====
+
+
 class Usuario:
     def __init__(self, DNI, nombre, apellido, NRO, mail):
         self.dni = DNI
@@ -113,10 +119,12 @@ class Proveedor:
     def agregar_producto(self):
         """Intenta crear un producto nuevo y lo asocia a este proveedor."""
         cod = input("Ingrese el código del producto: ")
-        for producto in self.productos:
+        # ===== CORRECCIÓN DE CODEX =====
+        for producto in PRODUCTOS_REGISTRADOS:
             if str(producto.codigo) == str(cod):
                 print("El producto ya existe")
                 return None
+        # ===== FIN CORRECCIÓN DE CODEX =====
 
         nombre = input("Ingrese el nombre: ")
         precio = float(input("Ingrese el precio: "))
@@ -128,6 +136,7 @@ class Proveedor:
         # ===== CORRECCIÓN DE CODEX =====
         # El código original agregaba el mismo producto dos veces.
         self.productos.append(producto)
+        PRODUCTOS_REGISTRADOS.append(producto)
         # ===== FIN CORRECCIÓN DE CODEX =====
         print("Producto agregado correctamente")
         return producto
@@ -218,6 +227,41 @@ cliente = Cliente
 
 
 # ===== CÓDIGO AGREGADO POR CODEX =====
+def demostrar_productos_desde_mysql():
+    """Lee productos existentes y los convierte en objetos Producto."""
+    # Reutiliza la conexi?n existente, configurada para PF2etapa en conexion.py.
+    from conexion import conectar_mysql
+
+    conexion = None
+    cursor = None
+    try:
+        conexion = conectar_mysql()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "SELECT id, nombre_producto, precio, stock, id_provedor FROM producto"
+        )
+        resultados = cursor.fetchall()
+        productos_mysql = []
+        for fila in resultados:
+            # MySQL no tiene marca ni perecedero; se usan los valores por defecto.
+            producto = Producto(
+                fila[0], fila[1], fila[2], fila[3], proveedor=fila[4]
+            )
+            productos_mysql.append(producto)
+            PRODUCTOS_REGISTRADOS.append(producto)
+            producto.mostrar_datos()
+        print(f"Productos le?dos desde MySQL: {len(productos_mysql)}")
+        return productos_mysql
+    except Exception as error:
+        print(f"No se pudo consultar MySQL: {error}")
+        return []
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conexion is not None and conexion.is_connected():
+            conexion.close()
+
+
 def ejecutar_pruebas_locales():
     """Pruebas de POO que no modifican ninguna base de datos."""
     usuario = Usuario(123, "Ana", "Pérez", "111", "ana@mail.com")
@@ -225,6 +269,8 @@ def ejecutar_pruebas_locales():
     producto = Producto(10, "Producto de prueba", 100, 5,
                         "Marca de prueba", proveedor, False)
     proveedor.productos.append(producto)
+    PRODUCTOS_REGISTRADOS.append(producto)
+    proveedor.consultar_productos()
     producto.mostrar_datos()
     producto.consultar_stock()
     producto.esta_disponible()
@@ -236,5 +282,5 @@ def ejecutar_pruebas_locales():
 if __name__ == "__main__":
     # ===== PRUEBAS AGREGADAS POR CODEX =====
     ejecutar_pruebas_locales()
-    # La prueba de MySQL se ejecuta desde ini.py.
+    demostrar_productos_desde_mysql()
     # ===== FIN PRUEBAS AGREGADAS POR CODEX =====
