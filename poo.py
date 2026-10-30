@@ -5,13 +5,8 @@
 
 # ===== CORRECCIÓN DE CODEX =====
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 # ===== FIN CORRECCIÓN DE CODEX =====
-
-
-# ===== CÓDIGO AGREGADO POR CODEX =====
-# Lista sencilla para detectar c?digos repetidos entre proveedores.
-PRODUCTOS_REGISTRADOS = []
-# ===== FIN CÓDIGO AGREGADO POR CODEX =====
 
 
 class Usuario:
@@ -30,12 +25,22 @@ class Usuario:
 
 
 class Producto:
+    # CÓDIGO AGREGADO POR CODEX: validación de datos y encapsulamiento del stock.
     def __init__(self, codigo, nombre, precio: float, stock: int,
                  marca="No informada", proveedor=None, perecedero=False):
+        if codigo is None or not str(codigo).strip():
+            raise ValueError("El código del producto no puede quedar vacío.")
+        if not isinstance(nombre, str) or not nombre.strip():
+            raise ValueError("El nombre del producto no puede quedar vacío.")
+        try:
+            precio_validado = Decimal(str(precio))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError("El precio debe ser un número válido.") from exc
+        if not precio_validado.is_finite() or precio_validado < 0:
+            raise ValueError("El precio no puede ser negativo.")
         self.codigo = codigo
-        self.nombre = nombre
-        self.precio = float(precio)
-        # CÓDIGO AGREGADO POR CODEX: el stock solo cambia con métodos validados.
+        self.nombre = nombre.strip()
+        self.precio = float(precio_validado)
         self._stock = self._validar_stock_inicial(stock)
         self.marca = marca
         self.proveedor = proveedor
@@ -59,36 +64,34 @@ class Producto:
 
     @staticmethod
     def _validar_stock_inicial(stock):
-        if isinstance(stock, bool) or not isinstance(stock, int) or stock < 0:
-            raise ValueError("El stock inicial debe ser un entero no negativo")
+        if isinstance(stock, bool) or not isinstance(stock, int) or not 0 <= stock <= 2147483647:
+            raise ValueError("El stock debe ser un entero entre 0 y 2147483647.")
         return stock
 
     @staticmethod
     def _validar_cantidad(cantidad):
         if isinstance(cantidad, bool) or not isinstance(cantidad, int) or cantidad <= 0:
-            raise ValueError("La cantidad debe ser un entero mayor que cero")
+            raise ValueError("La cantidad debe ser un entero mayor que cero.")
 
     def aumentar_stock(self, cantidad):
         self._validar_cantidad(cantidad)
+        if self._stock + cantidad > 2147483647:
+            raise ValueError("El stock supera el máximo permitido por la columna INT de MySQL.")
         self._stock += cantidad
         return self._stock
 
     def disminuir_stock(self, cantidad):
         self._validar_cantidad(cantidad)
         if cantidad > self._stock:
-            print("ERROR: No existe stock suficiente.")
             return False
         self._stock -= cantidad
         return self._stock
 
     def actualizar_stock(self, stock):
-        # Compatibilidad con el método anterior: permite únicamente aumentos o reducciones válidos.
+        # Compatibilidad con el método anterior: actualiza solo a un entero no negativo.
         nuevo = self._validar_stock_inicial(stock)
-        diferencia = nuevo - self._stock
-        if diferencia > 0:
-            self.aumentar_stock(diferencia)
-        elif diferencia < 0:
-            self.disminuir_stock(-diferencia)
+        self._stock = nuevo
+        return self._stock
 
     def esta_disponible(self):
         disponible = self.stock > 0
@@ -98,6 +101,7 @@ class Producto:
 
 
 class Proveedor:
+    # CÓDIGO AGREGADO POR CODEX: mantiene la interfaz original y permite cargar productos desde MySQL.
     def __init__(self, id, nombre, ubicacion, nro):
         self.id = id
         self.nombre = nombre
@@ -105,43 +109,97 @@ class Proveedor:
         self.nro = nro
         self.productos = []
 
-    def actualizar_datos(self):
-        dato = input("Seleccione 1 para modificar nombre, 2 para modificar ubicación o 3 para modificar NRO telefónico: ")
-        if dato == "1":
-            self.nombre = input("Ingrese el nombre nuevo del proveedor: ")
-        elif dato == "2":
-            self.ubicacion = input("Ingrese la ubicación nueva del proveedor: ")
-        elif dato == "3":
-            self.nro = input("Ingrese el NRO telefónico nuevo del proveedor: ")
-        else:
-            print("La opción no existe")
+    def actualizar_datos(self, nombre=None, ubicacion=None, nro=None):
+        if nombre is None and ubicacion is None and nro is None:
+            from main import OperacionCancelada, pedir_input
+            try:
+                dato = pedir_input("Seleccione 1 nombre, 2 ubicación o 3 teléfono: ")
+            except OperacionCancelada:
+                print("Operación cancelada; no se guardaron cambios.")
+                return False
+            if dato == "1":
+                try:
+                    nombre = pedir_input("Ingrese el nombre nuevo del proveedor: ")
+                except OperacionCancelada:
+                    print("Operación cancelada; no se guardaron cambios.")
+                    return False
+            elif dato == "2":
+                try:
+                    ubicacion = pedir_input("Ingrese la ubicación nueva del proveedor: ")
+                except OperacionCancelada:
+                    print("Operación cancelada; no se guardaron cambios.")
+                    return False
+            elif dato == "3":
+                try:
+                    nro = pedir_input("Ingrese el teléfono nuevo del proveedor: ")
+                except OperacionCancelada:
+                    print("Operación cancelada; no se guardaron cambios.")
+                    return False
+            else:
+                print("La opción no existe")
+                return False
+        nombre_nuevo = self.nombre if nombre is None else str(nombre).strip()
+        ubicacion_nueva = self.ubicacion if ubicacion is None else str(ubicacion).strip()
+        nro_nuevo = self.nro if nro is None else nro
+        if isinstance(nro_nuevo, str) and nro_nuevo.isdigit():
+            nro_nuevo = int(nro_nuevo)
+        if not nombre_nuevo:
+            raise ValueError("El nombre no puede quedar vacío.")
+        if not ubicacion_nueva:
+            raise ValueError("La ubicación no puede quedar vacía.")
+        if self.id is not None:
+            from conexion import actualizar_proveedor
+            actualizado = actualizar_proveedor(self.id, nombre_nuevo, nro_nuevo, ubicacion_nueva)
+            if actualizado is None:
+                return False
+        if nombre is not None:
+            if not str(nombre).strip():
+                raise ValueError("El nombre no puede quedar vacío.")
+            self.nombre = nombre_nuevo
+        if ubicacion is not None:
+            if not str(ubicacion).strip():
+                raise ValueError("La ubicación no puede quedar vacía.")
+            self.ubicacion = ubicacion_nueva
+        if nro is not None:
+            self.nro = nro_nuevo
+        return True
 
     def agregar_producto(self):
-        """Intenta crear un producto nuevo y lo asocia a este proveedor."""
-        cod = input("Ingrese el código del producto: ")
-        # ===== CORRECCIÓN DE CODEX =====
-        for producto in PRODUCTOS_REGISTRADOS:
-            if str(producto.codigo) == str(cod):
-                print("El producto ya existe")
-                return None
-        # ===== FIN CORRECCIÓN DE CODEX =====
-
-        nombre = input("Ingrese el nombre: ")
-        precio = float(input("Ingrese el precio: "))
-        stock = int(input("Ingrese el stock: "))
-        marca = input("Ingrese la marca: ")
-        perecedero = bool(int(input("¿Es perecedero? 1-Sí / 0-No: ")))
-        producto = Producto(cod, nombre, precio, stock, marca, self, perecedero)
-
-        # ===== CORRECCIÓN DE CODEX =====
-        # El código original agregaba el mismo producto dos veces.
+        """Asocia un producto al proveedor en memoria; la persistencia se realiza desde el menú CRUD."""
+        from main import OperacionCancelada, pedir_input
+        try:
+            cod = pedir_input("Ingrese el código del producto: ")
+        except OperacionCancelada:
+            print("Operación cancelada; no se guardaron cambios.")
+            return None
+        if any(str(producto.codigo) == cod for producto in self.productos):
+            print("El producto ya existe")
+            return None
+        try:
+            nombre = pedir_input("Ingrese el nombre: ")
+            precio = pedir_input("Ingrese el precio: ")
+            stock = pedir_input("Ingrese el stock: ")
+            marca = pedir_input("Ingrese la marca: ")
+            perecedero = pedir_input("¿Es perecedero? 1-Sí / 0-No: ")
+        except OperacionCancelada:
+            print("Operación cancelada; no se guardaron cambios.")
+            return None
+        if perecedero not in ("0", "1"):
+            print("La opción debe ser 0 o 1.")
+            return None
+        producto = Producto(cod, nombre, precio, int(stock), marca, self, perecedero == "1")
         self.productos.append(producto)
-        PRODUCTOS_REGISTRADOS.append(producto)
-        # ===== FIN CORRECCIÓN DE CODEX =====
         print("Producto agregado correctamente")
         return producto
 
     def consultar_productos(self):
+        # CÓDIGO AGREGADO POR CODEX: refresca la relación con los datos persistidos.
+        if self.id is not None:
+            try:
+                from conexion import productos_de_proveedor
+                self.productos = productos_de_proveedor(self.id)
+            except Exception as error:
+                print(f"No se pudieron consultar los productos en MySQL: {error}")
         print(f"Productos de {self.nombre}:")
         for producto in self.productos:
             print(f"- {producto.nombre} (código {producto.codigo})")
@@ -149,16 +207,19 @@ class Proveedor:
 
 
 class Movimientos_Stock:
+    # Se conserva la clase de POO de la etapa actual, sin persistencia de historial.
+    # CÓDIGO AGREGADO POR CODEX: la persistencia ocurre en conexion.registrar_movimiento dentro de una transacción.
     def __init__(self, id, tipo, producto, cantidad):
+        if isinstance(cantidad, bool) or not isinstance(cantidad, int) or cantidad <= 0:
+            raise ValueError("La cantidad debe ser un entero mayor que cero.")
         self.id = id
         self.tipo = tipo
         self.producto = producto
-        self.cantidad = int(cantidad)
-        # ===== CORRECCIÓN DE CODEX =====
+        self.cantidad = cantidad
         ahora = datetime.now()
-        # ===== FIN CORRECCIÓN DE CODEX =====
         self.fecha = ahora.date()
         self.hora = ahora.time()
+        self.fecha_hora = ahora
 
     def registrar_mov(self):
         print("Movimiento registrado")
@@ -168,119 +229,3 @@ class Movimientos_Stock:
         print("Fecha:", self.fecha)
         print("Hora:", self.hora)
         return self
-
-
-# ===== CORRECCIÓN DE CODEX =====
-class Administrador(Usuario):
-    def gestionar_usuarios(self, usuarios):
-        print(f"Usuarios registrados: {len(usuarios)}")
-        return usuarios
-
-    def gestionar_productos(self, productos):
-        print(f"Productos registrados: {len(productos)}")
-        return productos
-
-    def gestionar_proveedores(self, proveedores):
-        print(f"Proveedores registrados: {len(proveedores)}")
-        return proveedores
-
-    def consultar_movimientos(self, movimientos):
-        for movimiento in movimientos:
-            movimiento.registrar_mov()
-        return movimientos
-
-
-class Cajero(Usuario):
-    def registrar_venta(self, producto, cantidad=1):
-        cantidad = int(cantidad)
-        if cantidad <= 0 or cantidad > producto.stock:
-            print("No hay stock suficiente para realizar la venta")
-            return False
-        if producto.disminuir_stock(cantidad) is False:
-            return False
-        print(f"Venta registrada: {cantidad} unidad(es) de {producto.nombre}")
-        return True
-
-    def consultar_producto(self, producto):
-        producto.mostrar_datos()
-        return producto
-
-    def consultar_stock(self, producto):
-        return producto.consultar_stock()
-
-
-class Cliente(Usuario):
-    def consultar_producto(self, producto):
-        producto.mostrar_datos()
-        return producto
-
-    def consultar_precio(self, producto):
-        print(f"Precio de {producto.nombre}: ${producto.precio:.2f}")
-        return producto.precio
-
-
-# Se conservan los nombres que el grupo ya había utilizado.
-admin = Administrador
-cajero = Cajero
-cliente = Cliente
-# ===== FIN CORRECCIÓN DE CODEX =====
-
-
-# ===== CÓDIGO AGREGADO POR CODEX =====
-def demostrar_productos_desde_mysql():
-    """Lee productos existentes y los convierte en objetos Producto."""
-    # Reutiliza la conexi?n existente, configurada para PF2etapa en conexion.py.
-    from conexion import conectar_mysql
-
-    conexion = None
-    cursor = None
-    try:
-        conexion = conectar_mysql()
-        cursor = conexion.cursor()
-        cursor.execute(
-            "SELECT id, nombre_producto, precio, stock, id_provedor FROM producto"
-        )
-        resultados = cursor.fetchall()
-        productos_mysql = []
-        for fila in resultados:
-            # MySQL no tiene marca ni perecedero; se usan los valores por defecto.
-            producto = Producto(
-                fila[0], fila[1], fila[2], fila[3], proveedor=fila[4]
-            )
-            productos_mysql.append(producto)
-            PRODUCTOS_REGISTRADOS.append(producto)
-            producto.mostrar_datos()
-        print(f"Productos le?dos desde MySQL: {len(productos_mysql)}")
-        return productos_mysql
-    except Exception as error:
-        print(f"No se pudo consultar MySQL: {error}")
-        return []
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conexion is not None and conexion.is_connected():
-            conexion.close()
-
-
-def ejecutar_pruebas_locales():
-    """Pruebas de POO que no modifican ninguna base de datos."""
-    usuario = Usuario(123, "Ana", "Pérez", "111", "ana@mail.com")
-    proveedor = Proveedor(1, "Proveedor de prueba", "Córdoba", "222")
-    producto = Producto(10, "Producto de prueba", 100, 5,
-                        "Marca de prueba", proveedor, False)
-    proveedor.productos.append(producto)
-    PRODUCTOS_REGISTRADOS.append(producto)
-    proveedor.consultar_productos()
-    producto.mostrar_datos()
-    producto.consultar_stock()
-    producto.esta_disponible()
-    movimiento = Movimientos_Stock(1, "entrada", producto, 5)
-    movimiento.registrar_mov()
-    return usuario, proveedor, producto, movimiento
-
-
-if __name__ == "__main__":
-    # ===== PRUEBAS AGREGADAS POR CODEX =====
-    ejecutar_pruebas_locales()
-    demostrar_productos_desde_mysql()
-    # ===== FIN PRUEBAS AGREGADAS POR CODEX =====
