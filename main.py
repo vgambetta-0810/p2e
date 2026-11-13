@@ -92,12 +92,11 @@ def menu_productos():
             opcion = pedir_input("> ")
             if opcion == "1":
                 nombre = pedir_texto("Nombre: ")
-                marca = pedir_texto("Marca: ")
                 perecedero = pedir_perecedero()
                 id_proveedor = pedir_entero("ID del proveedor: ", 1)
                 precio = pedir_precio()
                 stock = pedir_entero("Stock inicial: ", 0)
-                producto = conexion.crear_producto(nombre, precio, stock, id_proveedor, marca, perecedero)
+                producto = conexion.crear_producto(nombre, precio, stock, id_proveedor, perecedero)
                 print("Producto registrado:")
                 mostrar_producto(producto)
             elif opcion == "2":
@@ -117,12 +116,11 @@ def menu_productos():
                     continue
                 print("Dejá vacío cada campo que quieras conservar.")
                 nombre = pedir_texto(f"Nombre [{anterior.nombre}]: ", anterior.nombre)
-                marca = pedir_texto(f"Marca [{anterior.marca}]: ", anterior.marca)
                 perecedero = pedir_perecedero("Perecedero 1-Sí / 2-No (vacío conserva): ", anterior.perecedero)
                 precio = pedir_precio(f"Precio [{anterior.precio}]: ", anterior.precio)
                 stock = pedir_entero(f"Stock [{anterior.stock}]: ", 0) if pedir_input("¿Modificar stock? (s/N): ").lower() == "s" else anterior.stock
                 proveedor_id = pedir_entero(f"ID proveedor [{anterior.proveedor.id}]: ", 1) if pedir_input("¿Modificar proveedor? (s/N): ").lower() == "s" else anterior.proveedor.id
-                producto = conexion.actualizar_producto(id_producto, nombre, precio, proveedor_id, marca, perecedero, stock)
+                producto = conexion.actualizar_producto(id_producto, nombre, precio, proveedor_id, perecedero, stock)
                 print("Producto actualizado.")
                 mostrar_producto(producto)
             elif opcion == "5":

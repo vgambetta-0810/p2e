@@ -30,6 +30,9 @@ def conectar_mysql():
         "password": os.getenv("MYSQL_PASSWORD", ""),
         "database": os.getenv("MYSQL_DATABASE", "PF2etapa"),
         "connection_timeout": 5,
+        # El conector C puede terminar Python 3.14 con una access violation
+        # durante connect(); la implementación Python evita ese cierre abrupto.
+        "use_pure": True,
     }
     if not configuracion["password"]:
         raise RuntimeError("Configurá MYSQL_PASSWORD en las variables de entorno.")
@@ -89,7 +92,7 @@ def _validar_telefono(cel):
 def verificar_esquema(cursor):
     """Valida las columnas conocidas antes de ejecutar operaciones CRUD."""
     esperado = {
-        "producto": {"id", "nombre_producto", "precio", "stock", "id_provedor", "marca", "perecedero"},
+        "producto": {"id", "nombre_producto", "precio", "stock", "id_provedor", "perecedero"},
         "provedor": {"id", "nombre_empresa", "cel", "ubicacion"},
         "movimientos": {"idmov", "id_producto", "cantidad", "fecha_hora", "tipo_mov"},
     }
@@ -105,11 +108,11 @@ def verificar_esquema(cursor):
 def _producto(fila):
     from poo import Producto, Proveedor
     proveedor = Proveedor(fila["id_provedor"], fila.get("nombre_empresa") or "", fila.get("ubicacion") or "", fila.get("cel") or "")
-    return Producto(fila["id"], fila["nombre_producto"], fila["precio"], fila["stock"], marca=fila.get("marca") or "No informada", proveedor=proveedor, perecedero=bool(fila.get("perecedero", False)))
+    return Producto(fila["id"], fila["nombre_producto"], fila["precio"], fila["stock"], proveedor=proveedor, perecedero=bool(fila.get("perecedero", False)))
 
 
 # CÓDIGO AGREGADO POR CODEX: columnas comunes para convertir filas de productos.
-_COLUMNAS_PRODUCTO = "p.id,p.nombre_producto,p.precio,p.stock,p.id_provedor,p.marca,p.perecedero,v.nombre_empresa,v.ubicacion,v.cel"
+_COLUMNAS_PRODUCTO = "p.id,p.nombre_producto,p.precio,p.stock,p.id_provedor,p.perecedero,v.nombre_empresa,v.ubicacion,v.cel"
 
 
 def _proveedor(fila):
@@ -167,9 +170,8 @@ def _guardar(sql, parametros):
         return cur.lastrowid, cur.rowcount
 
 
-def crear_producto(nombre, precio, stock, id_proveedor, marca="No informada", perecedero=False):
+def crear_producto(nombre, precio, stock, id_proveedor, perecedero=False):
     nombre = _validar_texto(nombre, "El nombre")
-    marca = _validar_texto(marca, "La marca")
     if not isinstance(perecedero, bool):
         raise ValueError("El estado perecedero debe ser Sí o No.")
     precio = _validar_precio(precio)
@@ -178,17 +180,16 @@ def crear_producto(nombre, precio, stock, id_proveedor, marca="No informada", pe
     _validar_id(id_proveedor, "El ID del proveedor")
     if buscar_proveedor(id_proveedor) is None:
         raise ValueError("El proveedor indicado no existe.")
-    nuevo_id, _ = _guardar("INSERT INTO producto (nombre_producto,marca,perecedero,precio,stock,id_provedor) VALUES (%s,%s,%s,%s,%s,%s)", (nombre, marca, perecedero, precio, stock, id_proveedor))
+    nuevo_id, _ = _guardar("INSERT INTO producto (nombre_producto,perecedero,precio,stock,id_provedor) VALUES (%s,%s,%s,%s,%s)", (nombre, perecedero, precio, stock, id_proveedor))
     return buscar_producto(nuevo_id)
 
 
-def actualizar_producto(id_producto, nombre, precio, id_proveedor, marca=None, perecedero=None, stock=None):
+def actualizar_producto(id_producto, nombre, precio, id_proveedor, perecedero=None, stock=None):
     _validar_id(id_producto, "El ID del producto")
     anterior = buscar_producto(id_producto)
     if anterior is None:
         return None
     nombre = _validar_texto(anterior.nombre if nombre is None else nombre, "El nombre")
-    marca = _validar_texto(anterior.marca if marca is None else marca, "La marca")
     precio = _validar_precio(anterior.precio if precio is None else precio)
     id_proveedor = anterior.proveedor.id if id_proveedor is None else id_proveedor
     _validar_id(id_proveedor, "El ID del proveedor")
@@ -208,7 +209,7 @@ def actualizar_producto(id_producto, nombre, precio, id_proveedor, marca=None, p
         if fila_stock is None:
             return None
         stock_anterior = fila_stock["stock"]
-        cur.execute("UPDATE producto SET nombre_producto=%s,marca=%s,perecedero=%s,precio=%s,stock=%s,id_provedor=%s WHERE id=%s", (nombre, marca, perecedero, precio, stock, id_proveedor, id_producto))
+        cur.execute("UPDATE producto SET nombre_producto=%s,perecedero=%s,precio=%s,stock=%s,id_provedor=%s WHERE id=%s", (nombre, perecedero, precio, stock, id_proveedor, id_producto))
         if stock != stock_anterior:
             tipo = "ENTRADA" if stock > stock_anterior else "SALIDA"
             cur.execute("INSERT INTO movimientos (id_producto,cantidad,fecha_hora,tipo_mov) VALUES (%s,%s,NOW(),%s)", (id_producto, abs(stock - stock_anterior), tipo))
@@ -242,12 +243,12 @@ def registrar_movimiento(id_producto, cantidad, tipo):
         raise ValueError("El tipo debe ser ENTRADA o SALIDA.")
     with cursor_db(True) as (db, cur):
         verificar_esquema(cur)
-        cur.execute("SELECT id,nombre_producto,marca,perecedero,precio,stock,id_provedor FROM producto WHERE id=%s FOR UPDATE", (id_producto,))
+        cur.execute("SELECT id,nombre_producto,perecedero,precio,stock,id_provedor FROM producto WHERE id=%s FOR UPDATE", (id_producto,))
         fila = cur.fetchone()
         if fila is None:
             raise ValueError("No existe un producto con ese identificador.")
         from poo import Producto, Movimientos_Stock
-        producto = Producto(fila["id"], fila["nombre_producto"], fila["precio"], fila["stock"], marca=fila["marca"], proveedor=fila["id_provedor"], perecedero=bool(fila["perecedero"]))
+        producto = Producto(fila["id"], fila["nombre_producto"], fila["precio"], fila["stock"], proveedor=fila["id_provedor"], perecedero=bool(fila["perecedero"]))
         nuevo_stock = producto.aumentar_stock(cantidad) if tipo == "ENTRADA" else producto.disminuir_stock(cantidad)
         if nuevo_stock is False:
             raise ValueError("No hay stock suficiente para realizar esa salida.")

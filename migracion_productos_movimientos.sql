@@ -3,7 +3,6 @@
 -- Ejecutar una sola vez sobre la base PF2etapa. No recrea tablas ni elimina datos.
 
 ALTER TABLE producto
-    ADD COLUMN marca VARCHAR(50) NOT NULL DEFAULT 'No informada',
     ADD COLUMN perecedero BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Los movimientos existentes conservan sus columnas y relaciones.

@@ -3,6 +3,7 @@
 # iniciados por el grupo. Las correcciones y agregados están marcados debajo.
 # ===== FIN CÓDIGO ORIGINAL DEL GRUPO =====
 
+
 # ===== CORRECCIÓN DE CODEX =====
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -27,7 +28,7 @@ class Usuario:
 class Producto:
     # CÓDIGO AGREGADO POR CODEX: validación de datos y encapsulamiento del stock.
     def __init__(self, codigo, nombre, precio: float, stock: int,
-                 marca="No informada", proveedor=None, perecedero=False):
+                 proveedor=None, perecedero=False):
         if codigo is None or not str(codigo).strip():
             raise ValueError("El código del producto no puede quedar vacío.")
         if not isinstance(nombre, str) or not nombre.strip():
@@ -42,7 +43,6 @@ class Producto:
         self.nombre = nombre.strip()
         self.precio = float(precio_validado)
         self._stock = self._validar_stock_inicial(stock)
-        self.marca = marca
         self.proveedor = proveedor
         self.perecedero = bool(perecedero)
 
@@ -51,7 +51,7 @@ class Producto:
         print(
             f"Código: {self.codigo} | Nombre: {self.nombre} | "
             f"Precio: ${self.precio:.2f} | Stock: {self.consultar_stock()} | "
-            f"Marca: {self.marca} | Proveedor: {proveedor} | "
+            f"Proveedor: {proveedor} | "
             f"Perecedero: {self.perecedero}"
         )
 
@@ -111,30 +111,13 @@ class Proveedor:
 
     def actualizar_datos(self, nombre=None, ubicacion=None, nro=None):
         if nombre is None and ubicacion is None and nro is None:
-            from main import OperacionCancelada, pedir_input
-            try:
-                dato = pedir_input("Seleccione 1 nombre, 2 ubicación o 3 teléfono: ")
-            except OperacionCancelada:
-                print("Operación cancelada; no se guardaron cambios.")
-                return False
+            dato = input("Seleccione 1 nombre, 2 ubicación o 3 teléfono: ").strip()
             if dato == "1":
-                try:
-                    nombre = pedir_input("Ingrese el nombre nuevo del proveedor: ")
-                except OperacionCancelada:
-                    print("Operación cancelada; no se guardaron cambios.")
-                    return False
+                nombre = input("Ingrese el nombre nuevo del proveedor: ").strip()
             elif dato == "2":
-                try:
-                    ubicacion = pedir_input("Ingrese la ubicación nueva del proveedor: ")
-                except OperacionCancelada:
-                    print("Operación cancelada; no se guardaron cambios.")
-                    return False
+                ubicacion = input("Ingrese la ubicación nueva del proveedor: ").strip()
             elif dato == "3":
-                try:
-                    nro = pedir_input("Ingrese el teléfono nuevo del proveedor: ")
-                except OperacionCancelada:
-                    print("Operación cancelada; no se guardaron cambios.")
-                    return False
+                nro = input("Ingrese el teléfono nuevo del proveedor: ").strip()
             else:
                 print("La opción no existe")
                 return False
@@ -166,28 +149,18 @@ class Proveedor:
 
     def agregar_producto(self):
         """Asocia un producto al proveedor en memoria; la persistencia se realiza desde el menú CRUD."""
-        from main import OperacionCancelada, pedir_input
-        try:
-            cod = pedir_input("Ingrese el código del producto: ")
-        except OperacionCancelada:
-            print("Operación cancelada; no se guardaron cambios.")
-            return None
+        cod = input("Ingrese el código del producto: ").strip()
         if any(str(producto.codigo) == cod for producto in self.productos):
             print("El producto ya existe")
             return None
-        try:
-            nombre = pedir_input("Ingrese el nombre: ")
-            precio = pedir_input("Ingrese el precio: ")
-            stock = pedir_input("Ingrese el stock: ")
-            marca = pedir_input("Ingrese la marca: ")
-            perecedero = pedir_input("¿Es perecedero? 1-Sí / 0-No: ")
-        except OperacionCancelada:
-            print("Operación cancelada; no se guardaron cambios.")
-            return None
+        nombre = input("Ingrese el nombre: ").strip()
+        precio = input("Ingrese el precio: ")
+        stock = input("Ingrese el stock: ")
+        perecedero = input("¿Es perecedero? 1-Sí / 0-No: ").strip()
         if perecedero not in ("0", "1"):
             print("La opción debe ser 0 o 1.")
             return None
-        producto = Producto(cod, nombre, precio, int(stock), marca, self, perecedero == "1")
+        producto = Producto(cod, nombre, precio, int(stock), self, perecedero == "1")
         self.productos.append(producto)
         print("Producto agregado correctamente")
         return producto
@@ -208,7 +181,6 @@ class Proveedor:
 
 class Movimientos_Stock:
     # Se conserva la clase de POO de la etapa actual, sin persistencia de historial.
-    # CÓDIGO AGREGADO POR CODEX: la persistencia ocurre en conexion.registrar_movimiento dentro de una transacción.
     def __init__(self, id, tipo, producto, cantidad):
         if isinstance(cantidad, bool) or not isinstance(cantidad, int) or cantidad <= 0:
             raise ValueError("La cantidad debe ser un entero mayor que cero.")
@@ -219,7 +191,6 @@ class Movimientos_Stock:
         ahora = datetime.now()
         self.fecha = ahora.date()
         self.hora = ahora.time()
-        self.fecha_hora = ahora
 
     def registrar_mov(self):
         print("Movimiento registrado")
